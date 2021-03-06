@@ -6,5 +6,11 @@
 #                    --labels ./label.txt   \
 #                    --output train_fold0.json
 
-python train.py -c 3 -p vinxray --batch_size 4 --lr 1e-3 --num_epochs 50 \
-                    --load_weights ./logs/vinxray/efficientdet-d3_19_17500.pth
+# training
+python train.py -c 4 -p vinxray --batch_size 2 --lr 1e-3 --num_epochs 50 \
+                    --load_weights pretrained_weights/efficientdet-d4.pth
+
+
+# # testing and submit
+# python test.py -c 3 --data_path /mnt/fast_house/dataset/vinxray/test_images/ \
+#                --load_weights ./logs/vinxray/efficientdet-d3_49_43900.pth

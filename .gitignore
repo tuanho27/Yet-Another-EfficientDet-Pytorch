@@ -129,3 +129,7 @@ dmypy.json
 .pyre/
 .idea/
 weights/
+*.csv
+datasets
+logs 
+pretrained_weights

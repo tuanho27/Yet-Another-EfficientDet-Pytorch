@@ -16,9 +16,9 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm.autonotebook import tqdm
 
-from backbone import EfficientDetBackbone
-from efficientdet.dataset import CocoDataset, Resizer, Normalizer, Augmenter, collater
-from efficientdet.loss import FocalLoss
+from models.backbone import EfficientDetBackbone
+from models.efficientdet.dataset import CocoDataset, Resizer, Normalizer, Augmenter, collater
+from models.efficientdet.loss import FocalLoss
 from utils.sync_batchnorm import patch_replication_callback
 from utils.utils import replace_w_sync_bn, CustomDataParallel, get_last_weights, init_weights, boolean_string
 
@@ -82,7 +82,7 @@ class ModelWithLoss(nn.Module):
 
 
 def train(opt):
-    params = Params(f'projects/{opt.project}.yml')
+    params = Params(f'configs/{opt.project}.yml')
 
     if params.num_gpus == 0:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
