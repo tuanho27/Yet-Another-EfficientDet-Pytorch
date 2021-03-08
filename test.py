@@ -44,8 +44,8 @@ if __name__== "__main__":
     parser.add_argument('-w', '--load_weights', type=str, default=None,
                         help='whether to load weights from a checkpoint, set None to initialize, set \'last\' to load last checkpoint')
     parser.add_argument('--speed_test', action='store_true', help='FPS speed testing')
-    parser.add_argument('--threshold', type=float, default=0.1)
-    parser.add_argument('--iou_threshold', type=float, default=0.3)
+    parser.add_argument('--threshold', type=float, default=0.01)
+    parser.add_argument('--iou_threshold', type=float, default=0.4)
     args = parser.parse_args()
 
     compound_coef = args.compound_coef
@@ -101,6 +101,33 @@ if __name__== "__main__":
         if cls_model_b6.iloc[i].target < cls_threshold:
             PredictionStrings.append("14 1 0 0 1 1")
         
+        elif cls_model_b6.iloc[i].target > cls_threshold and cls_model_b6.iloc[i].target < 0.97:
+            img_path = os.path.join(args.data_path, f'{ids}.png')
+            ori_imgs, framed_imgs, framed_metas = preprocess(img_path, max_size=input_size)
+            if use_cuda:
+                x = torch.stack([torch.from_numpy(fi).cuda() for fi in framed_imgs], 0)
+            else:
+                x = torch.stack([torch.from_numpy(fi) for fi in framed_imgs], 0)
+            x = x.to(torch.float32 if not use_float16 else torch.float16).permute(0, 3, 1, 2)
+            with torch.no_grad():
+                features, regression, classification, anchors = model(x)
+                regressBoxes = BBoxTransform()
+                clipBoxes = ClipBoxes()
+
+                out = postprocess(x,
+                                anchors, regression, classification,
+                                regressBoxes, clipBoxes,
+                                threshold, iou_threshold)
+            out = invert_affine(framed_metas, out)
+            valid_strings = ''
+            for idx in range(len(out[0]['rois'])):
+                id_str = str(out[0]['class_ids'][idx])
+                score_str = str(round(out[0]['scores'][idx], 2))
+                bbox_str = list(np.round(out[0]['rois'][idx].reshape(-1),1).astype(str))
+                valid_strings += ' '.join(map(str, [id_str, score_str, bbox_str[0],bbox_str[1], bbox_str[2], bbox_str[3],'']))
+            valid_strings+=' 14 1 0 0 1 1' 
+            PredictionStrings.append(valid_strings)
+
         else:
             img_path = os.path.join(args.data_path, f'{ids}.png')
             ori_imgs, framed_imgs, framed_metas = preprocess(img_path, max_size=input_size)

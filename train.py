@@ -15,12 +15,20 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm.autonotebook import tqdm
-
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, CosineAnnealingLR
 from models.backbone import EfficientDetBackbone
 from models.efficientdet.dataset import CocoDataset, Resizer, Normalizer, Augmenter, collater
+from models.efficientdet.augments import RandomFlip, CutOut, AutoAugment, BrightnessTransform, Rotate, Mosaic
 from models.efficientdet.loss import FocalLoss
 from utils.sync_batchnorm import patch_replication_callback
 from utils.utils import replace_w_sync_bn, CustomDataParallel, get_last_weights, init_weights, boolean_string
+
+FP16 = False
+try:
+    from apex import amp
+except:
+    print("Apex is not installed, training in FP32")
+    FP16=False
 
 
 class Params:
@@ -113,6 +121,9 @@ def train(opt):
     # input_sizes = [640, 1024, 1535]
     training_set = CocoDataset(root_dir=os.path.join(opt.data_path, params.project_name), set=params.train_set,
                                transform=transforms.Compose([Normalizer(mean=params.mean, std=params.std),
+                                                             RandomFlip(flip_ratio=0.5),
+                                                             CutOut(n_holes=8, cutout_shape=(32,32)),
+                                                            #  MixUp(p=0.5, lambd=0.5),
                                                              Augmenter(),
                                                              Resizer(input_sizes[opt.compound_coef])]))
     training_generator = DataLoader(training_set, **training_params)
@@ -125,6 +136,17 @@ def train(opt):
     model = EfficientDetBackbone(num_classes=len(params.obj_list), compound_coef=opt.compound_coef,
                                  ratios=eval(params.anchors_ratios), scales=eval(params.anchors_scales))
 
+    if opt.optim == 'adamw':
+        optimizer = torch.optim.AdamW(model.parameters(), opt.lr)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), opt.lr, momentum=0.9, nesterov=True)
+
+    if FP16:
+         model, optimizer = amp.initialize(model.cuda(), optimizer, opt_level='O1', verbosity=0)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=params["lr_min"], last_epoch=-1)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=1, eta_min=1e-7, last_epoch=-1)
+    
     # load last weights
     if opt.load_weights is not None:
         if opt.load_weights.endswith('.pth'):
@@ -186,13 +208,6 @@ def train(opt):
             if use_sync_bn:
                 patch_replication_callback(model)
 
-    if opt.optim == 'adamw':
-        optimizer = torch.optim.AdamW(model.parameters(), opt.lr)
-    else:
-        optimizer = torch.optim.SGD(model.parameters(), opt.lr, momentum=0.9, nesterov=True)
-
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
-
     epoch = 0
     best_loss = 1e5
     best_epoch = 0
@@ -223,6 +238,7 @@ def train(opt):
                         imgs = imgs.cuda()
                         annot = annot.cuda()
 
+
                     optimizer.zero_grad()
                     cls_loss, reg_loss = model(imgs, annot, obj_list=params.obj_list)
                     cls_loss = cls_loss.mean()
@@ -232,7 +248,13 @@ def train(opt):
                     if loss == 0 or not torch.isfinite(loss):
                         continue
 
-                    loss.backward()
+                    # calculate gradient
+                    if FP16:
+                        with amp.scale_loss(loss, optimizer) as scaled_loss:
+                            scaled_loss.backward()
+                    else:        
+                        loss.backward()
+
                     # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                     optimizer.step()
 
@@ -317,9 +339,9 @@ def train(opt):
 
 def save_checkpoint(model, name):
     if isinstance(model, CustomDataParallel):
-        torch.save(model.module.model.state_dict(), os.path.join(opt.saved_path, name))
+        torch.save(model.module.model.state_dict(), os.path.join(opt.saved_path, '08Mar', name))
     else:
-        torch.save(model.model.state_dict(), os.path.join(opt.saved_path, name))
+        torch.save(model.model.state_dict(), os.path.join(opt.saved_path,'08Mar' ,name))
 
 
 if __name__ == '__main__':

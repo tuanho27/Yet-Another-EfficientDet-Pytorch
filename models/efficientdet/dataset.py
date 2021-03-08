@@ -6,7 +6,6 @@ from torch.utils.data import Dataset, DataLoader
 from pycocotools.coco import COCO
 import cv2
 
-
 class CocoDataset(Dataset):
     def __init__(self, root_dir, set='train2017', transform=None):
 
@@ -133,6 +132,8 @@ class Resizer(object):
         annots[:, :4] *= scale
 
         return {'img': torch.from_numpy(new_image).to(torch.float32), 'annot': torch.from_numpy(annots), 'scale': scale}
+
+
 
 
 class Augmenter(object):

@@ -20,8 +20,8 @@ from tqdm import tqdm
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-from backbone import EfficientDetBackbone
-from efficientdet.utils import BBoxTransform, ClipBoxes
+from models.backbone import EfficientDetBackbone
+from models.efficientdet.utils import BBoxTransform, ClipBoxes
 from utils.utils import preprocess, invert_affine, postprocess, boolean_string
 
 ap = argparse.ArgumentParser()
@@ -46,7 +46,7 @@ weights_path = f'weights/efficientdet-d{compound_coef}.pth' if args.weights is N
 
 print(f'running coco-style evaluation on project {project_name}, weights {weights_path}...')
 
-params = yaml.safe_load(open(f'projects/{project_name}.yml'))
+params = yaml.safe_load(open(f'configs/{project_name}.yml'))
 obj_list = params['obj_list']
 
 input_sizes = [512, 640, 768, 896, 1024, 1280, 1280, 1536, 1536]
